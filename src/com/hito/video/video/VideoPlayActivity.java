@@ -151,6 +151,7 @@ public class VideoPlayActivity extends BaseActivity {
 	 * false:非静音
 	 */
 	private boolean isMute = false;
+	private boolean isBegin = false;
 
 	/**
 	 * 视频加载
@@ -171,6 +172,7 @@ public class VideoPlayActivity extends BaseActivity {
 	 * 手指在屏幕上滑动的起始位置
 	 */
 	private float startY;
+	private float startX;
 	/**
 	 * 屏幕滑动的范围
 	 */
@@ -180,9 +182,17 @@ public class VideoPlayActivity extends BaseActivity {
 	 */
 	private int mVol;
 	/**
+	 * 滑动前的进度
+	 */
+	private int mProgress;
+	/**
 	 * 判断当前播放路径是否来源于网络
 	 */
 	private boolean isNetUri;
+	/**
+	 * 视频总时长
+	 */
+	private int duration;
 
 	private Handler mHandler = new Handler() {
 		public void handleMessage(android.os.Message msg) {
@@ -391,6 +401,7 @@ public class VideoPlayActivity extends BaseActivity {
 	 * */
 	@Override
 	public boolean onTouchEvent(MotionEvent event) {
+		// TODO 左右滑动 改变视频进度
 		super.onTouchEvent(event);
 		detector.onTouchEvent(event);
 		switch (event.getAction()) {
@@ -398,26 +409,43 @@ public class VideoPlayActivity extends BaseActivity {
 			removeDelayedHideControlPlayer();
 			// 记录初始值
 			startY = event.getY();
+			startX = event.getX();
 			audioTouchRang = Math.min(screenHeight, screenWidth);
 			mVol = am.getStreamVolume(AudioManager.STREAM_MUSIC);
+			mProgress = seekbar_video.getProgress();
 			break;
 		case MotionEvent.ACTION_MOVE:
 			/**
 			 * 记录endY
 			 */
 			float endY = event.getY();
+			float endX = event.getX();
 			/**
 			 * 计算偏移量
 			 */
 			float distanceY = startY - endY;
+			float distanceX = startX = endX;
 			/**
 			 * 计算屏幕滑动比例
 			 */
 			float detal = distanceY / audioTouchRang;
+			float detalProgress = distanceX / duration;
+			/**
+			 * 计算改变的进度
+			 * 
+			 * 改变的进度 = 滑动的距离 /总距离*总时长
+			 */
+			float progress = distanceX / audioTouchRang * duration;
+			/**
+			 * 屏蔽非法值 找出要设置的进度
+			 */
+			float progressS = Math.min(Math.max(progress + mProgress, 0),
+					duration);
+
 			/**
 			 * 计算改变的音量值
 			 * 
-			 * 改变的音量 = 欢动的距离/总距离*总音量
+			 * 改变的音量 = 滑动的距离/总距离*总音量
 			 */
 			float volume = distanceY / audioTouchRang * maxVolume;
 			/**
@@ -428,6 +456,9 @@ public class VideoPlayActivity extends BaseActivity {
 			if (detal != 0) {
 				updateVoice((int) volmeS);
 			}
+			if (detalProgress != 0) {
+				updateProgress((int) progressS);
+			}
 
 			break;
 		case MotionEvent.ACTION_UP:// 手指离开
@@ -435,8 +466,39 @@ public class VideoPlayActivity extends BaseActivity {
 			break;
 		default:
 			break;
-		}
+		}	
 		return true;
+	}
+
+	/**
+	 * 调节音量的方法
+	 * 
+	 * @param volume
+	 *            ：要调节成的音量值
+	 */
+	protected void updateVoice(int volume) {
+		if (isMute) {
+			// 静音
+			// 最后一个参数改成1的话，随着拖动条的改变，系统的声音也会发生改变
+			am.setStreamVolume(AudioManager.STREAM_MUSIC, 0, 0);
+			seekbar_voice.setProgress(0);
+		} else {
+			// 非静音
+			am.setStreamVolume(AudioManager.STREAM_MUSIC, volume, 0);
+			seekbar_voice.setProgress(volume);
+		}
+		currentVolume = volume;
+	}
+
+	/**
+	 * 调节进度的方法
+	 * 
+	 * @param progressS
+	 *            :要设置成的进度
+	 * 
+	 */
+	private void updateProgress(int progressS) {
+		seekbar_video.setProgress(progressS);
 	}
 
 	/**
@@ -616,8 +678,7 @@ public class VideoPlayActivity extends BaseActivity {
 				// 开始播放
 				videoView.start();
 				isPlay = true;
-				// 得到视频长度
-				int duration = videoView.getDuration();
+				duration = videoView.getDuration();
 				tv_duration.setText(utils.stringFroTime(duration));
 
 				// 1,视频总时长 关联seekbar
@@ -726,26 +787,6 @@ public class VideoPlayActivity extends BaseActivity {
 		// finish();
 		// 立刻关闭会导致系统播放器重新被创建---延迟两秒进入系统播放器
 		mHandler.sendEmptyMessageDelayed(FINISH, 2000);
-	}
-
-	/**
-	 * 调节音量的方法
-	 * 
-	 * @param volume
-	 *            ：要调节成的音量值
-	 */
-	protected void updateVoice(int volume) {
-		if (isMute) {
-			// 静音
-			// 最后一个参数改成1的话，随着拖动条的改变，系统的声音也会发生改变
-			am.setStreamVolume(AudioManager.STREAM_MUSIC, 0, 0);
-			seekbar_voice.setProgress(0);
-		} else {
-			// 非静音
-			am.setStreamVolume(AudioManager.STREAM_MUSIC, volume, 0);
-			seekbar_voice.setProgress(volume);
-		}
-		currentVolume = volume;
 	}
 
 	/**

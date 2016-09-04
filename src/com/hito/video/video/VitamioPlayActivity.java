@@ -21,6 +21,7 @@ import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Message;
 import android.util.Log;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
@@ -66,6 +67,10 @@ public class VitamioPlayActivity extends BaseActivity {
 	 */
 	private static final int DEFAULT_SCREEN = 4;
 	private static final int FINISH = 5;
+	/**
+	 * 更新进度
+	 */
+	protected static final int UPDATE_PROGRESS = 6;
 
 	/**
 	 * 是否是全屏
@@ -140,6 +145,10 @@ public class VitamioPlayActivity extends BaseActivity {
 	 * 最大音量
 	 */
 	private int maxVolume;
+	/**
+	 * 视频时长
+	 */
+	private int duration;
 
 	/**
 	 * 当前是否是静音
@@ -173,6 +182,30 @@ public class VitamioPlayActivity extends BaseActivity {
 	private Handler mHandler = new Handler() {
 		public void handleMessage(android.os.Message msg) {
 			switch (msg.what) {
+			case UPDATE_PROGRESS:
+				long pro  = (Long) msg.obj;
+				videoView.seekTo(pro);
+				seekbar_video.setProgress((int) pro);
+				// 设置显示当前手机的时间
+				tv_system_time.setText(utils.getSystemTime());
+
+				if (isNetUri) {
+					// 设置缓冲进度
+					// 缓冲比例值： 0 - 100 之间
+					int percentage = videoView.getBufferPercentage();
+					int total = percentage * seekbar_video.getMax();
+					int secondaryProgress = total / 100;
+					seekbar_video.setSecondaryProgress(secondaryProgress);
+				} else {
+					seekbar_video.setSecondaryProgress(0);
+				}
+
+				// 消息的死循环
+				if (!isDestory) {
+					mHandler.removeMessages(PROGRESS);
+					mHandler.sendEmptyMessageDelayed(PROGRESS, 1000);
+				}
+				break;
 			case PROGRESS:
 				// 得到视频当前播放进度
 				int currentPosition = (int) videoView.getCurrentPosition();
@@ -377,6 +410,7 @@ public class VitamioPlayActivity extends BaseActivity {
 	 * 手指在屏幕上滑动的起始位置
 	 */
 	private float startY;
+	private float startX;
 	/**
 	 * 屏幕滑动的范围
 	 */
@@ -385,6 +419,10 @@ public class VitamioPlayActivity extends BaseActivity {
 	 * 滑动前的音量值
 	 */
 	private int mVol;
+	/**
+	 * 滑动前的进度
+	 */
+	private long mProgress;
 
 	/**
 	 * 使用手势识别器
@@ -398,26 +436,34 @@ public class VitamioPlayActivity extends BaseActivity {
 			removeDelayedHideControlPlayer();
 			// 记录初始值
 			startY = event.getY();
+			startX = event.getX();
 			audioTouchRang = Math.min(screenHeight, screenWidth);
+			duration = Math.min(screenHeight, screenWidth);
 			mVol = am.getStreamVolume(AudioManager.STREAM_MUSIC);
+			mProgress = videoView.getCurrentPosition();
 			break;
 		case MotionEvent.ACTION_MOVE:
 			/**
 			 * 记录endY
 			 */
 			float endY = event.getY();
+			float endX = event.getX();
 			/**
 			 * 计算偏移量
 			 */
 			float distanceY = startY - endY;
+			float distanceX = startX = endX;
+			System.out.println("xxxxxxxxxxxx" + distanceX);
+			System.out.println("yyyyyyyyyyyy" + distanceY);
 			/**
 			 * 计算屏幕滑动比例
 			 */
 			float detal = distanceY / audioTouchRang;
+
 			/**
 			 * 计算改变的音量值
 			 * 
-			 * 改变的音量 = 欢动的距离/总距离*总音量
+			 * 改变的音量 = 滑动的距离/总距离*总音量
 			 */
 			float volume = distanceY / audioTouchRang * maxVolume;
 			/**
@@ -425,9 +471,13 @@ public class VitamioPlayActivity extends BaseActivity {
 			 */
 			float volmeS = Math.min(Math.max(volume + mVol, 0), maxVolume);
 
+
 			if (detal != 0) {
 				updateVoice((int) volmeS);
 			}
+//			if (Math.abs(distanceX) > 0) {
+//				updateProgress(mProgress + 100);
+//			}
 
 			break;
 		case MotionEvent.ACTION_UP:// 手指离开
@@ -437,6 +487,14 @@ public class VitamioPlayActivity extends BaseActivity {
 			break;
 		}
 		return true;
+	}
+
+	private void updateProgress(long progressS) {
+//		videoView.seekTo(progressS);
+		Message msg = mHandler.obtainMessage();
+		msg.obj = progressS;
+		msg.what = UPDATE_PROGRESS;
+		mHandler.sendMessage(msg);
 	}
 
 	/**
@@ -623,8 +681,7 @@ public class VitamioPlayActivity extends BaseActivity {
 				// 开始播放
 				videoView.start();
 				isPlay = true;
-				// 得到视频长度
-				int duration = (int) videoView.getDuration();
+				duration = (int) videoView.getDuration();
 				tv_duration.setText(utils.stringFroTime(duration));
 
 				// 1,视频总时长 关联seekbar
